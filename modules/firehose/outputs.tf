@@ -1,7 +1,7 @@
 output "delivery_stream_name" {
-  value = aws_kinesis_firehose_delivery_stream.ventas_firehose.name
+  value = aws_kinesis_firehose_delivery_stream.firehose_stream.name
 }
 
-output "destination_bucket_name" {
-  value = aws_s3_bucket.destino.bucket
+output "bucket_name" {
+  value = aws_s3_bucket.firehose_bucket.bucket
 }

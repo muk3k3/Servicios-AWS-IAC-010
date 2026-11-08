@@ -1,7 +1,7 @@
 data "aws_caller_identity" "current" {}
 
-resource "aws_kinesis_stream" "ventas_stream" {
-  name             = "${var.project_name}-stream-ventas-kardex"
+resource "aws_kinesis_stream" "kinesis_stream" {
+  name             = "${var.project_name}-kinesis-service"
   shard_count      = 1
   retention_period = 24
 
@@ -10,23 +10,21 @@ resource "aws_kinesis_stream" "ventas_stream" {
   }
 
   tags = {
-    Proyecto = "BembaFarma"
-    Servicio = "KinesisDataStreams"
+    Project = var.project_name
   }
 }
 
-resource "aws_s3_bucket" "auditoria" {
-  bucket        = "${var.project_name}-auditoria-${data.aws_caller_identity.current.account_id}"
+resource "aws_s3_bucket" "kinesis_bucket" {
+  bucket        = "${var.project_name}-kinesis-bucket-${data.aws_caller_identity.current.account_id}"
   force_destroy = true
 
   tags = {
-    Proyecto = "BembaFarma"
-    Servicio = "KinesisDataStreams"
+    Project = var.project_name
   }
 }
 
-resource "aws_s3_bucket_public_access_block" "auditoria" {
-  bucket = aws_s3_bucket.auditoria.id
+resource "aws_s3_bucket_public_access_block" "kinesis_bucket" {
+  bucket = aws_s3_bucket.kinesis_bucket.id
 
   block_public_acls       = true
   block_public_policy     = true
@@ -34,8 +32,8 @@ resource "aws_s3_bucket_public_access_block" "auditoria" {
   restrict_public_buckets = true
 }
 
-resource "aws_s3_bucket_server_side_encryption_configuration" "auditoria" {
-  bucket = aws_s3_bucket.auditoria.id
+resource "aws_s3_bucket_server_side_encryption_configuration" "kinesis_bucket" {
+  bucket = aws_s3_bucket.kinesis_bucket.id
 
   rule {
     apply_server_side_encryption_by_default {
@@ -44,18 +42,18 @@ resource "aws_s3_bucket_server_side_encryption_configuration" "auditoria" {
   }
 }
 
-resource "aws_cloudwatch_log_group" "consumer_a" {
-  name              = "/aws/lambda/${var.project_name}-consumer-a-alerta"
+resource "aws_cloudwatch_log_group" "lambda_a" {
+  name              = "/aws/lambda/${var.project_name}-lambda-a"
   retention_in_days = 7
 }
 
-resource "aws_cloudwatch_log_group" "consumer_b" {
-  name              = "/aws/lambda/${var.project_name}-consumer-b-auditoria"
+resource "aws_cloudwatch_log_group" "lambda_b" {
+  name              = "/aws/lambda/${var.project_name}-lambda-b"
   retention_in_days = 7
 }
 
-resource "aws_iam_role" "lambda_consumers_role" {
-  name = "${var.project_name}-lambda-consumers-role"
+resource "aws_iam_role" "lambda_role" {
+  name = "${var.project_name}-lambda-role"
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
@@ -67,9 +65,9 @@ resource "aws_iam_role" "lambda_consumers_role" {
   })
 }
 
-resource "aws_iam_role_policy" "lambda_consumers_policy" {
-  name = "${var.project_name}-lambda-consumers-policy"
-  role = aws_iam_role.lambda_consumers_role.id
+resource "aws_iam_role_policy" "lambda_policy" {
+  name = "${var.project_name}-lambda-policy"
+  role = aws_iam_role.lambda_role.id
 
   policy = jsonencode({
     Version = "2012-10-17"
@@ -83,12 +81,12 @@ resource "aws_iam_role_policy" "lambda_consumers_policy" {
           "kinesis:DescribeStreamSummary",
           "kinesis:ListShards"
         ]
-        Resource = aws_kinesis_stream.ventas_stream.arn
+        Resource = aws_kinesis_stream.kinesis_stream.arn
       },
       {
         Effect   = "Allow"
         Action   = ["s3:PutObject"]
-        Resource = "${aws_s3_bucket.auditoria.arn}/*"
+        Resource = "${aws_s3_bucket.kinesis_bucket.arn}/*"
       },
       {
         Effect = "Allow"
@@ -97,72 +95,72 @@ resource "aws_iam_role_policy" "lambda_consumers_policy" {
           "logs:PutLogEvents"
         ]
         Resource = [
-          "${aws_cloudwatch_log_group.consumer_a.arn}:*",
-          "${aws_cloudwatch_log_group.consumer_b.arn}:*"
+          "${aws_cloudwatch_log_group.lambda_a.arn}:*",
+          "${aws_cloudwatch_log_group.lambda_b.arn}:*"
         ]
       }
     ]
   })
 }
 
-data "archive_file" "consumer_a_zip" {
+data "archive_file" "lambda_a_zip" {
   type        = "zip"
-  source_file = "${path.module}/../../lambdas/consumer_a_alerta/index.py"
-  output_path = "${path.module}/../../build/consumer_a_alerta.zip"
+  source_file = "${path.module}/../../lambdas/lambda_a/index.py"
+  output_path = "${path.module}/../../build/lambda_a.zip"
 }
 
-data "archive_file" "consumer_b_zip" {
+data "archive_file" "lambda_b_zip" {
   type        = "zip"
-  source_file = "${path.module}/../../lambdas/consumer_b_auditoria/index.py"
-  output_path = "${path.module}/../../build/consumer_b_auditoria.zip"
+  source_file = "${path.module}/../../lambdas/lambda_b/index.py"
+  output_path = "${path.module}/../../build/lambda_b.zip"
 }
 
-resource "aws_lambda_function" "consumer_a" {
-  function_name    = "${var.project_name}-consumer-a-alerta"
-  role             = aws_iam_role.lambda_consumers_role.arn
+resource "aws_lambda_function" "lambda_a" {
+  function_name    = "${var.project_name}-lambda-a"
+  role             = aws_iam_role.lambda_role.arn
   handler          = "index.handler"
   runtime          = "python3.14"
-  filename         = data.archive_file.consumer_a_zip.output_path
-  source_code_hash = data.archive_file.consumer_a_zip.output_base64sha256
+  filename         = data.archive_file.lambda_a_zip.output_path
+  source_code_hash = data.archive_file.lambda_a_zip.output_base64sha256
   timeout          = 15
 
   depends_on = [
-    aws_iam_role_policy.lambda_consumers_policy,
-    aws_cloudwatch_log_group.consumer_a
+    aws_iam_role_policy.lambda_policy,
+    aws_cloudwatch_log_group.lambda_a
   ]
 }
 
-resource "aws_lambda_event_source_mapping" "consumer_a_mapping" {
-  event_source_arn  = aws_kinesis_stream.ventas_stream.arn
-  function_name     = aws_lambda_function.consumer_a.arn
+resource "aws_lambda_event_source_mapping" "lambda_a_mapping" {
+  event_source_arn  = aws_kinesis_stream.kinesis_stream.arn
+  function_name     = aws_lambda_function.lambda_a.arn
   starting_position = "TRIM_HORIZON"
   batch_size        = 10
 }
 
-resource "aws_lambda_function" "consumer_b" {
-  function_name    = "${var.project_name}-consumer-b-auditoria"
-  role             = aws_iam_role.lambda_consumers_role.arn
+resource "aws_lambda_function" "lambda_b" {
+  function_name    = "${var.project_name}-lambda-b"
+  role             = aws_iam_role.lambda_role.arn
   handler          = "index.handler"
   runtime          = "python3.14"
-  filename         = data.archive_file.consumer_b_zip.output_path
-  source_code_hash = data.archive_file.consumer_b_zip.output_base64sha256
+  filename         = data.archive_file.lambda_b_zip.output_path
+  source_code_hash = data.archive_file.lambda_b_zip.output_base64sha256
   timeout          = 15
 
   depends_on = [
-    aws_iam_role_policy.lambda_consumers_policy,
-    aws_cloudwatch_log_group.consumer_b
+    aws_iam_role_policy.lambda_policy,
+    aws_cloudwatch_log_group.lambda_b
   ]
 
   environment {
     variables = {
-      AUDIT_BUCKET = aws_s3_bucket.auditoria.bucket
+      OUTPUT_BUCKET = aws_s3_bucket.kinesis_bucket.bucket
     }
   }
 }
 
-resource "aws_lambda_event_source_mapping" "consumer_b_mapping" {
-  event_source_arn  = aws_kinesis_stream.ventas_stream.arn
-  function_name     = aws_lambda_function.consumer_b.arn
+resource "aws_lambda_event_source_mapping" "lambda_b_mapping" {
+  event_source_arn  = aws_kinesis_stream.kinesis_stream.arn
+  function_name     = aws_lambda_function.lambda_b.arn
   starting_position = "TRIM_HORIZON"
   batch_size        = 10
 }

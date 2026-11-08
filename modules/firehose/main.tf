@@ -1,17 +1,16 @@
 data "aws_caller_identity" "current" {}
 
-resource "aws_s3_bucket" "destino" {
-  bucket        = "${var.project_name}-firehose-destino-${data.aws_caller_identity.current.account_id}"
+resource "aws_s3_bucket" "firehose_bucket" {
+  bucket        = "${var.project_name}-firehose-bucket-${data.aws_caller_identity.current.account_id}"
   force_destroy = true
 
   tags = {
-    Proyecto = "BembaFarma"
-    Servicio = "AmazonDataFirehose"
+    Project = var.project_name
   }
 }
 
-resource "aws_s3_bucket_public_access_block" "destino" {
-  bucket = aws_s3_bucket.destino.id
+resource "aws_s3_bucket_public_access_block" "firehose_bucket" {
+  bucket = aws_s3_bucket.firehose_bucket.id
 
   block_public_acls       = true
   block_public_policy     = true
@@ -19,8 +18,8 @@ resource "aws_s3_bucket_public_access_block" "destino" {
   restrict_public_buckets = true
 }
 
-resource "aws_s3_bucket_server_side_encryption_configuration" "destino" {
-  bucket = aws_s3_bucket.destino.id
+resource "aws_s3_bucket_server_side_encryption_configuration" "firehose_bucket" {
+  bucket = aws_s3_bucket.firehose_bucket.id
 
   rule {
     apply_server_side_encryption_by_default {
@@ -56,7 +55,7 @@ resource "aws_iam_role_policy" "firehose_policy" {
           "s3:ListBucket",
           "s3:ListBucketMultipartUploads"
         ]
-        Resource = aws_s3_bucket.destino.arn
+        Resource = aws_s3_bucket.firehose_bucket.arn
       },
       {
         Effect = "Allow"
@@ -65,27 +64,26 @@ resource "aws_iam_role_policy" "firehose_policy" {
           "s3:GetObject",
           "s3:PutObject"
         ]
-        Resource = "${aws_s3_bucket.destino.arn}/*"
+        Resource = "${aws_s3_bucket.firehose_bucket.arn}/*"
       }
     ]
   })
 }
 
-resource "aws_kinesis_firehose_delivery_stream" "ventas_firehose" {
-  name        = "${var.project_name}-delivery-ventas"
+resource "aws_kinesis_firehose_delivery_stream" "firehose_stream" {
+  name        = "${var.project_name}-firehose-service"
   destination = "extended_s3"
 
   extended_s3_configuration {
     role_arn   = aws_iam_role.firehose_role.arn
-    bucket_arn = aws_s3_bucket.destino.arn
-    prefix     = "ventas/"
+    bucket_arn = aws_s3_bucket.firehose_bucket.arn
+    prefix     = "records/"
 
     buffering_size     = 1
     buffering_interval = 60
   }
 
   tags = {
-    Proyecto = "BembaFarma"
-    Servicio = "AmazonDataFirehose"
+    Project = var.project_name
   }
 }

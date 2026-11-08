@@ -2,7 +2,7 @@ import base64
 import binascii
 import json
 
-UMBRAL_STOCK_CRITICO = 5
+LIMITE_VALOR_BAJO = 5
 
 
 def handler(event, context):
@@ -13,8 +13,8 @@ def handler(event, context):
     for record in event["Records"]:
         try:
             payload = base64.b64decode(record["kinesis"]["data"], validate=True)
-            venta = json.loads(payload.decode("utf-8"))
-            if not isinstance(venta, dict):
+            evento = json.loads(payload.decode("utf-8"))
+            if not isinstance(evento, dict):
                 raise ValueError("el registro JSON no es un objeto")
             procesados += 1
         except (binascii.Error, KeyError, TypeError, ValueError, UnicodeDecodeError, json.JSONDecodeError) as error:
@@ -22,19 +22,18 @@ def handler(event, context):
             print(f"Registro invalido omitido: {error}")
             continue
 
-        stock_restante = venta.get("stock_restante")
+        valor = evento.get("valor")
 
-        if isinstance(stock_restante, (int, float)) and not isinstance(stock_restante, bool) and stock_restante <= UMBRAL_STOCK_CRITICO:
-            alertas.append(venta)
+        if isinstance(valor, (int, float)) and not isinstance(valor, bool) and valor <= LIMITE_VALOR_BAJO:
+            alertas.append(evento)
             print(
-                f"ALERTA stock critico | sucursal={venta.get('sucursal')} "
-                f"producto={venta.get('producto')} "
-                f"stock_restante={stock_restante}"
+                f"ALERTA valor bajo | origen={evento.get('origen')} "
+                f"valor={valor}"
             )
 
     print(
-        f"Consumer A proceso {procesados} registros validos, "
-        f"omitio {invalidos} invalidos y genero {len(alertas)} alertas de stock critico"
+        f"Lambda A proceso {procesados} registros validos, "
+        f"omitio {invalidos} invalidos y genero {len(alertas)} alertas de valor bajo"
     )
     return {
         "registros_procesados": procesados,
