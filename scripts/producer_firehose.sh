@@ -19,7 +19,7 @@ fi
 baseline_count=$(aws s3api list-objects-v2 \
   --bucket "$bucket_name" \
   --prefix "records/" \
-  --query 'KeyCount' \
+  --query 'length(Contents || `[]`)' \
   --output text)
 if [[ ! "$baseline_count" =~ ^[0-9]+$ ]]; then
   baseline_count=0
@@ -54,12 +54,12 @@ fi
 printf '\nSe enviaron %s/%s registros. Esperando entrega en S3...\n' "$accepted" "$EXPECTED_RECORDS"
 printf 'Bucket destino: %s\n' "$bucket_name"
 
-max_attempts=36
+max_attempts=60
 for attempt in $(seq 1 "$max_attempts"); do
   object_count=$(aws s3api list-objects-v2 \
     --bucket "$bucket_name" \
     --prefix "records/" \
-    --query 'KeyCount' \
+    --query 'length(Contents || `[]`)' \
     --output text)
   if [[ "$object_count" =~ ^[0-9]+$ && "$object_count" -gt "$baseline_count" ]]; then
     printf 'Entrega confirmada: %s objeto(s) bajo records/ (antes: %s).\n' "$object_count" "$baseline_count"
