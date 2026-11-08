@@ -7,7 +7,7 @@ variable "aws_region" {
 variable "project_name" {
   description = "Prefijo usado para nombrar todos los recursos de este PoC"
   type        = string
-  default     = "bembafarma-streaming-poc"
+  default     = "aws-servicios"
 
   validation {
     condition     = can(regex("^[a-z0-9]([a-z0-9-]*[a-z0-9])?$", var.project_name)) && length(var.project_name) >= 3 && length(var.project_name) <= 30
